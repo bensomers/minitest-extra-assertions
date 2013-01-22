@@ -20,4 +20,4 @@ salve the headaches involved in switching.
 
 == Copyright
 
-Copyright (c) 2012 Ben Somers. See LICENSE.txt for further details.
+Copyright (c) 2012 Ben Somers, (c) 2013 Justin George. See LICENSE.txt for further details.
