@@ -1,29 +1,30 @@
 require 'helper'
 
-class TestMinitestExtraAssertions < Test::Unit::TestCase
+class TestMinitestExtraAssertions < Minitest::Test
   def setup
     super
 
-    MiniTest::Unit::TestCase.reset
+    Minitest::Test.reset
 
-    @tc = MiniTest::Unit::TestCase.new 'fake tc'
+    @tc = Minitest::Test.new 'fake tc'
     @zomg = "zomg ponies!"
     @assertion_count = 1
   end
 
   def teardown
-    assert_equal(@assertion_count, @tc._assertions,
-                 "expected #{@assertion_count} assertions to be fired during the test, not #{@tc._assertions}") if @tc._assertions
+    assert_equal(@assertion_count, @tc.assertions,
+                 "expected #{@assertion_count} assertions to be fired during the test, not #{@tc.assertions}") if @tc.assertions
     Object.send :remove_const, :ATestCase if defined? ATestCase
   end
 
-  def util_assert_triggered expected, klass = MiniTest::Assertion
+  def util_assert_triggered expected, klass = Minitest::Assertion
     e = assert_raises(klass) do
       yield
     end
 
     msg = e.message.sub(/(---Backtrace---).*/m, '\1')
     msg.gsub!(/\(oid=[-0-9]+\)/, '(oid=N)')
+    msg.gsub!(/(\d\.\d{6})\d+/, '\1xxx') # normalize: ruby version, impl, platform
 
     assert_equal expected, msg
   end
@@ -97,7 +98,7 @@ class TestMinitestExtraAssertions < Test::Unit::TestCase
 
     should "return false for values outside the bounds" do
       @assertion_count = 1
-      util_assert_triggered "Expected 100 to be between 10 and 1." do
+      util_assert_triggered "Expected 100 to be between 1 and 10." do
         @tc.assert_between(1, 10, 100)
       end
     end
@@ -110,12 +111,75 @@ class TestMinitestExtraAssertions < Test::Unit::TestCase
     end
   end
 
-  # This is pull-requested for minitest proper, hopefully will be merged soon
-  def test_assert_match_unusual_object
-    @assertion_count = 2
-    unusual_object = Object.new
-    def unusual_object.=~(other) true end
-    @tc.assert_match /pattern/, unusual_object
+  context ".assert_has_keys" do
+    should "return true if the keys are present" do
+      @assertion_count = 1
+      assert_equal true, @tc.assert_has_keys({ "a" => 1 }, "a"), %Q(returns true for key 'a' in {"a"=>1})
+    end
+
+    should "be triggered for a missing value" do
+      @assertion_count = 2
+      util_assert_triggered %Q(Expected {"a"=>1} to include all keys ["a", "b"].) do
+        @tc.assert_has_keys({ "a" => 1 }, %w(a b))
+      end
+    end
+
+    should "raise error for incompatible values" do
+      @assertion_count = 0
+      assert_raises NoMethodError do
+        @tc.assert_has_keys([], "a")
+      end
+    end
   end
 
+  context ".assert_missing_keys" do
+    should "return true if the keys are missing" do
+      @assertion_count = 1
+      assert_equal true, @tc.assert_missing_keys({ "a" => 1 }, "b"), "returns true for key 'b' missing from { 'a' => 1 }"
+    end
+
+    should "be triggered for a present value" do
+      @assertion_count = 1
+      util_assert_triggered %Q(Expected {"a"=>1} not to include any of these keys ["a", "b"].) do
+        @tc.assert_missing_keys({ "a" => 1 }, %w(a b))
+      end
+    end
+
+    should "raise error for incompatible values" do
+      @assertion_count = 0
+      assert_raises NoMethodError do
+        @tc.assert_missing_keys([], "a")
+      end
+    end
+  end
+
+  context ".assert_raises_with_message" do
+    should "return the matched exception if the exception and message match" do
+      @assertion_count = 2
+
+      res = @tc.assert_raises_with_message(ArgumentError, "Don't have a cow, man!") do
+        raise ArgumentError, "Don't have a cow, man!"
+      end
+
+      assert_kind_of ArgumentError, res
+    end
+
+    should "be triggered with a different exception" do
+      @assertion_count = 1
+      util_assert_triggered %Q([ArgumentError] exception expected, not\nClass: <NoMethodError>\nMessage: <"NoMethodError">\n---Backtrace---) do
+        @tc.assert_raises_with_message(ArgumentError, "Don’t have a cow, man!") do
+          raise NoMethodError
+        end
+      end
+    end
+
+    should "be triggered with a different message" do
+      @assertion_count = 2
+      util_assert_triggered %Q(ArgumentError exception expected with message "Don’t have a cow, man!".\nExpected: "Don’t have a cow, man!"\n  Actual: "Have a cow, man!") do
+        @tc.assert_raises_with_message(ArgumentError, "Don’t have a cow, man!") do
+          raise ArgumentError, "Have a cow, man!"
+        end
+      end
+    end
+  end
 end
